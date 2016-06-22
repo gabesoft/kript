@@ -14,8 +14,8 @@ main =
   do args <- liftIO getArgs
      case args of
        [sha] ->
-         do input <- escaping False $ cmd "git" "show --pretty='format:' --name-status HEAD"
+         do input <- escaping False $ cmd "git" (T.pack $ "show --pretty='format:' --name-status " ++ sha)
             echo input
        _ -> echo "Usage: gitowners sha"
      echo (T.pack . show $ args)
-     echo "hello from shell"
+     echo "hello from khell"

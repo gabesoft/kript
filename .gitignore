@@ -6,3 +6,4 @@ dist
 TAGS
 .cabal-sandbox
 .hpc
+bin

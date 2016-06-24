@@ -6,6 +6,4 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests" [unitTests]
-
-unitTests = Tests.Gown.Parser.tests
+tests = testGroup "Tests" [Tests.Gown.Parser.tests]

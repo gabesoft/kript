@@ -21,20 +21,21 @@ acl =
      _ <- eol
      return (aName,users)
 
-filePath = many1 (char ' ') *> many (noneOf ":\n") <* semi
+filePath = many1 (char ' ') *> many (noneOf $ nameExcludedChars ++ ":") <* semi
 
-aclName = many1 (char ' ') *> many (noneOf ":\n") <* semi
+aclName = many1 (char ' ') *> many (noneOf $ nameExcludedChars ++ ":") <* semi
 
-name = spaces *> many (noneOf ",\n")
+name = spaces *> many (noneOf $ nameExcludedChars ++ " ")
 
 names = sepBy name (char ',')
 
 semi = char ':'
 
--- eol = string "\n"
 eol =
   try (string "\n\r") <|> try (string "\r\n") <|> string "\n" <|>
   string "\r" <?> "end of line"
+
+nameExcludedChars = ",\t\v\f\r\n"
 
 -- parseOwnersData :: String -> Either ParseError [[String]]
 parseOwnersData = parse ownersData "(owners)"

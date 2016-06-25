@@ -9,11 +9,6 @@ import Gown.Parser
 
 default (T.Text)
 
-data Entry
-  = File String
-  | Owners String
-           String
-
 main =
   shelly $
   verbosely $

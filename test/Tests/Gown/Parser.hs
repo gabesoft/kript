@@ -18,7 +18,8 @@ instance Arbitrary SafeName where
   arbitrary =
     do name <-
          listOf1 $
-         elements $ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ "_-.!*|+&\\"
+         elements $
+         ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ "_-.!*|+&\\"
        return $ SafeName name
 
 makeParseTest
@@ -40,6 +41,38 @@ propTests :: TestTree
 propTests =
   testGroup "Gown.Parser - Property Tests" [testProperty "names" namesProp]
 
+toEntry entry = mkEntry entry
+  where mkEntry (file,owners) = AclEntry file (map mkOwners owners)
+        mkOwners (aclType,names) = AclOwners aclType names
+
+fileOwnersSingle = makeParseTest fileOwners input output
+  where input = " a/b/c/file1.txt:\n   type.acl: joe, jane, mo\n"
+        output = toEntry ("a/b/c/file1.txt",[("type.acl",["joe","jane","mo"])])
+
+fileOwnersMultiple =
+  makeParseTest parser
+                input
+                (map toEntry output)
+  where parser = many fileOwners
+        output =
+          [("a/b/file1.txt",[("acl1",["u1","u2","u3"])])
+          ,("a/b/file2.txt",[("acl2",["v1","u2","v3"])])
+          ,("a/b/file3.txt",[("acl3",["k1","u2","v3"])])]
+        input =
+          intercalate
+            "\n"
+            [" a/b/file1.txt:"
+            ,"  acl1: u1, u2, u3"
+            ," a/b/file2.txt:"
+            ,"  acl2: v1, u2, v3"
+            ," a/b/file3.txt:"
+            ,"  acl3: k1, u2, v3"
+            ,""]
+
+aclSingle = makeParseTest acl input output
+  where input = "  aname: blue, green, pink\n"
+        output = AclOwners "aname" ["blue","green","pink"]
+
 unitTests :: TestTree
 unitTests =
   testGroup "Gown.Parser - Unit Tests"
@@ -49,11 +82,10 @@ unitTests =
                            "blue, red, green"
                            ["blue","red","green"]
             ,testCase "filePath" $
-             makeParseTest filePath " a/b/c/file1.txt:" "a/b/c/file1.txt"
-            ,testCase "acl" $
-             makeParseTest acl
-                           "  aname: blue, green, pink\n"
-                           ("aname",["blue","green","pink"])
+             makeParseTest filePath " a/b/c/file1.txt:\n" "a/b/c/file1.txt"
+            ,testCase "fileOwners - single" fileOwnersSingle
+            ,testCase "fileOwners - multiple" fileOwnersMultiple
+            ,testCase "acl" aclSingle
             ,testCase "aclName" $ makeParseTest aclName " dyno:" "dyno"]
 
 tests :: TestTree

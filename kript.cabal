@@ -18,7 +18,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  build-depends:       base >= 4.8, parsec >= 3.1
+  build-depends:       base >= 4.8, parsec >= 3.1, ghci-pretty >= 0.0
   ghc-options:         -fwarn-incomplete-patterns -fwarn-name-shadowing
   exposed-modules:     Gown.Parser
   default-language:    Haskell2010

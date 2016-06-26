@@ -19,7 +19,7 @@ instance Arbitrary SafeName where
     do name <-
          listOf1 $
          elements $
-         ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ "_-.!*|+&\\"
+         ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ "$-_.!*'()+&|\\?"
        return $ SafeName name
 
 makeParseTest
@@ -41,18 +41,17 @@ propTests :: TestTree
 propTests =
   testGroup "Gown.Parser - Property Tests" [testProperty "names" namesProp]
 
-toEntry entry = mkEntry entry
-  where mkEntry (file,owners) = AclEntry file (map mkOwners owners)
-        mkOwners (aclType,names) = AclOwners aclType names
+mkEntry (file,owners) = AclEntry file (map mkOwners owners)
+  where mkOwners (aclType,names) = AclOwners aclType names
 
 fileOwnersSingle = makeParseTest fileOwners input output
   where input = " a/b/c/file1.txt:\n   type.acl: joe, jane, mo\n"
-        output = toEntry ("a/b/c/file1.txt",[("type.acl",["joe","jane","mo"])])
+        output = mkEntry ("a/b/c/file1.txt",[("type.acl",["joe","jane","mo"])])
 
 fileOwnersMultiple =
   makeParseTest parser
                 input
-                (map toEntry output)
+                (map mkEntry output)
   where parser = many fileOwners
         output =
           [("a/b/file1.txt",[("acl1",["u1","u2","u3"])])

@@ -4,7 +4,8 @@ all: build
 CONF = $(CURDIR)/kript.cabal
 DIST = $(CURDIR)/dist
 BIN = $(CURDIR)/bin
-SRC = $(CURDIR)/src/*.hs
+SRC_LIB = $(shell find $(CURDIR)/src-lib -iname "[^.]*.hs")
+SRC_EXE = $(shell find $(CURDIR)/src-EXE -iname "[^.]*.hs")
 DST = $(shell cat $(CONF) | grep executable | awk '{print $$2}')
 OUT = $(shell echo $(DST) | awk '{print "$(DIST)/build/"$$1"/"$$1}')
 TEMP = $(shell find $(CURDIR) -name ".\#*")
@@ -15,10 +16,10 @@ CABAL = cabal
 build: $(OUT) bin clean-temp
 	@cp $(OUT) $(BIN)/
 
-$(TEST_OUT): $(TEST_SRC) $(SRC) clean-temp
+$(TEST_OUT): $(TEST_SRC) $(SRC_LIB) $(CONF) clean-temp
 	@$(CABAL) test
 
-$(OUT): $(SRC)
+$(OUT): $(SRC_LIB) $(SRC_EXE) $(CONF)
 	@$(CABAL) build
 
 clean: clean-temp
@@ -31,10 +32,13 @@ bin:
 	@mkdir -p $(BIN)
 
 install:
-	@$(CABAL) install
+	$(CABAL) install --enable-tests
 
 sandbox:
-	@$(CABAL) init sandbox
+	$(CABAL) init sandbox
+
+sandbox-delete:
+	$(CABAL) sandbox deleet
 
 test: $(TEST_OUT)
 	@$(TEST_OUT)

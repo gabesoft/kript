@@ -1,18 +1,18 @@
--- | Show git owners for a particular commit
+-- | Compute a minimal list of owners that own all files in a commit
+-- | Usage: git show --pretty='format:' --name-only <sha> | xargs git owners | gown
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Control.Monad (forM, forM_)
 import qualified Data.Text as T
-import           Gown.Parser
-import           Gown.Processor
-import           Shelly
-import           System.Environment (getArgs)
+import Gown.Parser
+import Gown.Processor
+import Shelly
+import System.Environment (getArgs)
 import qualified Text.Show.Pretty as Pretty
 
 default (T.Text)
 
--- usage: cat file | gown
+main :: IO ()
 main =
   shelly $
   do args <- liftIO getArgs
@@ -52,4 +52,3 @@ unpack (Right xs) = xs
 --        _ -> echo "Usage: gitowners sha"
 --      echo (T.pack . show $ args)
 --      echo "hello from shell"
-

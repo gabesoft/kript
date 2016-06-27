@@ -12,14 +12,24 @@ import qualified Text.Show.Pretty as Pretty
 
 default (T.Text)
 
--- TODO get the input text via stdin rather than file
--- test with cat file | gown
+-- usage: cat file | gown
 main =
   shelly $
   do args <- liftIO getArgs
      text <- liftIO getContents
-     let ast = parseAcls text
-     echo $ T.pack $ (Pretty.ppShow ast)
+     let ast = unpack $ parseAcls text
+     let groups = findAclGroups ast
+     let aclsByOwner = aclTypesByOwner ast
+     -- echo "Original AST:"
+     -- echo $ T.pack $ (Pretty.ppShow ast)
+     echo "Acl types by owner:"
+     echo $ T.pack $ (Pretty.ppShow aclsByOwner)
+     echo "Best groups:"
+     echo $ T.pack $ (Pretty.ppShow groups)
+
+unpack :: Either a [b] -> [b]
+unpack (Left _) = []
+unpack (Right xs) = xs
 
 -- main =
 --   shelly $
@@ -42,8 +52,4 @@ main =
 --        _ -> echo "Usage: gitowners sha"
 --      echo (T.pack . show $ args)
 --      echo "hello from shell"
--- | Given an association list with entries of the form (file, user)
--- | compute the smallest group of users that covers all files or return
--- | Nothing if not possible
-getGroups assoc = undefined
 

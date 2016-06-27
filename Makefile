@@ -5,7 +5,7 @@ CONF = $(CURDIR)/kript.cabal
 DIST = $(CURDIR)/dist
 BIN = $(CURDIR)/bin
 SRC_LIB = $(shell find $(CURDIR)/src-lib -iname "[^.]*.hs")
-SRC_EXE = $(shell find $(CURDIR)/src-EXE -iname "[^.]*.hs")
+SRC_EXE = $(shell find $(CURDIR)/src-exe -iname "[^.]*.hs")
 DST = $(shell cat $(CONF) | grep executable | awk '{print $$2}')
 OUT = $(shell echo $(DST) | awk '{print "$(DIST)/build/"$$1"/"$$1}')
 TEMP = $(shell find $(CURDIR) -name ".\#*")
@@ -43,4 +43,4 @@ sandbox-delete:
 test: $(TEST_OUT)
 	@$(TEST_OUT)
 
-.PHONY: clean, all
+.PHONY: clean, all, build

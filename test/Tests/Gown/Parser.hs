@@ -30,24 +30,27 @@ makeParseTest parser input output = actual @?= expected
         expected = Right output
 
 namesProp :: [SafeName] -> Property
-namesProp xs = cond ==> actual == Right (map safeName xs)
+namesProp xs = nonEmpty ==> actual == Right (map safeName xs)
   where actual = parse names "" str
         str =
           intercalate ", "
                       (map safeName xs)
-        cond = length xs > 0
+        nonEmpty = not $ null xs
 
 propTests :: TestTree
-propTests =
-  testGroup "Gown.Parser - Property Tests" [testProperty "names" namesProp]
+propTests = testGroup "Property Tests" [testProperty "names" namesProp]
 
+mkEntry
+  :: (FilePath,[(String,[String])]) -> AclEntry
 mkEntry (file,owners) = AclEntry file (map mkOwners owners)
   where mkOwners (aclType,names) = AclOwners aclType names
 
+fileOwnersSingle :: Assertion
 fileOwnersSingle = makeParseTest fileOwners input output
   where input = " a/b/c/file1.txt:\n   type.acl: joe, jane, mo\n"
         output = mkEntry ("a/b/c/file1.txt",[("type.acl",["joe","jane","mo"])])
 
+fileOwnersMultiple :: Assertion
 fileOwnersMultiple =
   makeParseTest parser
                 input
@@ -68,13 +71,14 @@ fileOwnersMultiple =
             ,"  acl3: k1, u2, v3"
             ,""]
 
+aclSingle :: Assertion
 aclSingle = makeParseTest acl input output
   where input = "  aname: blue, green, pink\n"
         output = AclOwners "aname" ["blue","green","pink"]
 
 unitTests :: TestTree
 unitTests =
-  testGroup "Gown.Parser - Unit Tests"
+  testGroup "Unit Tests"
             [testCase "name" $ makeParseTest name "dagny" "dagny"
             ,testCase "names" $
              makeParseTest names

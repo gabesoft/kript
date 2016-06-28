@@ -13,7 +13,7 @@ TEST_OUT = $(DIST)/build/tests/tests
 TEST_SRC = $(shell find $(CURDIR)/test -iname "[^.]*.hs")
 CABAL = cabal
 
-build: $(OUT) bin clean-temp
+build: configure $(OUT) bin clean-temp
 	@cp $(OUT) $(BIN)/
 
 $(TEST_OUT): $(TEST_SRC) $(SRC_LIB) $(CONF) clean-temp
@@ -32,6 +32,7 @@ bin:
 	@mkdir -p $(BIN)
 
 install:
+	$(CABAL) install --only-dependencies
 	$(CABAL) install --enable-tests
 
 sandbox:
@@ -41,6 +42,9 @@ sandbox-delete:
 	$(CABAL) sandbox deleet
 
 configure:
+	$(CABAL) configure
+
+configure-test:
 	$(CABAL) configure --enable-tests
 
 test: $(TEST_OUT)

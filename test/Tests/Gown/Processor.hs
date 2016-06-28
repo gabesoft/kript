@@ -2,6 +2,7 @@
 module Tests.Gown.Processor where
 
 import Data.List
+import qualified Data.Set as Set
 import Gown.Processor
 import Test.HUnit (Assertion, (@?=))
 import Test.Tasty (TestTree, testGroup)
@@ -19,6 +20,23 @@ bestGroupTest = sort (bestGroup files owners) @?= expected
           ,("u4",["b","c","d"])
           ,("u5",["b","d","e"])]
         expected = ["u1","u5"]
+
+pruneSimilarTest :: Assertion
+pruneSimilarTest = (Set.toList actual) @?= expected
+  where alist =
+          [("u1",["a","c","x"])
+          ,("u2",["a","c"])
+          ,("u3",["a","c","z"])
+          ,("u4",["a","c"])
+          ,("u5",["a","c","w","x"])
+          ,("u6",["a","c"])
+          ,("u7",["a","c"])
+          ,("u8",["a","b"])
+          ,("u9",["k","b"])]
+        expected = ["u1", "u2","u3","u5","u8","u9"]
+        actual =
+          pruneSimilar (Set.fromList $ map fst alist)
+                       (mkMap alist)
 
 filesByOwnerTest :: Assertion
 filesByOwnerTest = undefined
@@ -40,6 +58,7 @@ unitTests =
             [testCase "bestGroup" bestGroupTest
             ,testCase "bestGroup - performance" bestGroupPerf
             ,testCase "bestGroup - not all files covered" bestGroupNotAllFilesCovered
+            ,testCase "pruneSimilar" pruneSimilarTest
             ,testCase "excludeAll" excludeAllTest]
 
 propTests :: TestTree
@@ -53,10 +72,13 @@ bestGroupPerf :: Assertion
 bestGroupPerf = sort (bestGroup files owners) @?= expected
   where files = group ['a' .. 'z']
         owners =
-          [("u1",["a","x","w","z"])
+          [("u1",["a","b","x","w","z"])
           ,("u2",["a","b","u","v","w"])
           ,("u3",["a","b","c"])
           ,("u4",["a","b","c","d"])
+          ,("u3a",["a","b"])
+          ,("u3b",["a","b"])
+          ,("u3c",["a","b"])
           ,("u5",["a","b","c","d","e","y"])
           ,("u6",["a","b","c","d","e","f"])
           ,("u7",["a","b","c","d","e","f","g"])
@@ -70,7 +92,7 @@ bestGroupPerf = sort (bestGroup files owners) @?= expected
           ,("u15",["a","b","c","d","e","f","g","h","l","m","n","o"])
           ,("u16"
            ,["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"])
-          ,("u17",["h","i","j","k","l","m","n","o","p","q"])
+          ,("u17",["a","b","h","i","j","k","l","m","n","o","p","q"])
           ,("u18",["a","b","g","h","i","j","k","l","m","n","o","p","q","r"])
           ,("u19",["a","b","h","i","j","k","l","m","n","o","p","q","r","s"])
           ,("u20",["a","b","c","d","h","i","j","k","l","m","n","o","s","t"])]
@@ -83,6 +105,9 @@ bestGroupNotAllFilesCovered = sort (bestGroup files owners) @?= expected
           [("u1",["a","x","w","z"])
           ,("u2",["a","b","u"])
           ,("u3",["a","b","c"])
+          ,("u3a",["a","b","c"])
+          ,("u3b",["a","b","c"])
+          ,("u3c",["a","b","c"])
           ,("u4",["a","b","c","d"])
           ,("u5",["a","b","c","d","e","y"])
           ,("u6",["a","b","c","d","e","f"])

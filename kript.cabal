@@ -48,4 +48,5 @@ test-suite tests
                        tasty-hunit >= 0.9,
                        tasty-quickcheck >= 0.8,
                        parsec >= 3.1,
+                       containers >= 0.5,
                        kript >= 0.1

@@ -1,11 +1,11 @@
 -- | Utilities for processing a list of acl entries
 module Gown.Processor
        (findAclGroups, aclTypesByOwner, excludeAll, sortByLongestValues,
-        bestGroup)
+        bestGroup, pruneSimilar, mkMap, mkReverseMap)
        where
 
 import Control.Monad
-import Data.List (sortBy, minimumBy)
+import Data.List (sortBy, groupBy, minimumBy, tails)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -19,14 +19,16 @@ sampleData = fmap extractSample parseAclsSample
 -- | Given a list of acl entries find all groups such that the members of
 -- | each group collectively own all files in the input entries list
 findAclGroups :: [AclEntry] -> [[String]]
-findAclGroups entries = findAllGroups allFiles ownersAlist
+findAclGroups entries =
+  findAllGroups allFiles
+                (Map.toList ownersMap)
   where ownersMap = mkFilesByOwnerMap entries
-        ownersAlist = sortByLongestValues $ Map.toList ownersMap
         allFiles = map aclFile entries
 
 -- | Returns an an association list matching owners with the comprehensive
 -- | list of acl types that they belong to
-aclTypesByOwner :: [AclEntry] -> [(String,[String])]
+aclTypesByOwner
+  :: [AclEntry] -> [(String,[String])]
 aclTypesByOwner = aclsByOwner . mkAclsByOwnerMap
 
 aclsByOwner
@@ -86,10 +88,18 @@ excludeAll keys = filter $ (not . flip elem keys) . fst
 -- | This is in essence a brute force implementation of the set cover problem
 bestGroup :: (Ord a,Ord b)
           => [b] -> [(a,[b])] -> [a]
-bestGroup files owners = loop filesSet []
-  where filesSet = Set.fromList files
-        filesByOwner = mkMap owners
-        ownersByFile = mkReverseMap owners
+bestGroup files owners
+  | filesSet == actualFiles = loop relevantFiles []
+  | otherwise = []
+  where filesByOwner = mkMap owners
+        filesSet = Set.fromList files
+        relevantUsers =
+          pruneSimilar (Set.fromList $ map fst owners)
+                       filesByOwner
+        ownersByFile =
+          Map.map (`Set.intersection` relevantUsers) (mkReverseMap owners)
+        actualFiles = Set.fromList (Map.keys ownersByFile)
+        relevantFiles = pruneSimilar filesSet ownersByFile
         exclude owner remaining =
           case Map.lookup owner filesByOwner of
             Nothing -> Set.empty
@@ -106,6 +116,19 @@ bestGroup files owners = loop filesSet []
                           loop (exclude o remaining)
                                (o : best))
                        (Set.toList os)
+
+-- | Given a set of keys and a map containing the same keys
+-- | keep only items in the keys set that have different values
+-- | in the map
+pruneSimilar
+  :: (Eq a,Ord a,Ord b)
+  => Set.Set b -> Map.Map b (Set.Set a) -> Set.Set b
+pruneSimilar xset xmap =
+  Set.difference xset
+                 (Set.fromList remove)
+  where alist = sortBy (comparing snd) $ Map.toList xmap
+        groups = groupBy (\x y -> (snd x) == (snd y)) alist
+        remove = join $ map (tail . map fst) groups
 
 mkMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)

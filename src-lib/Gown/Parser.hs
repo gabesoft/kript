@@ -6,6 +6,7 @@ module Gown.Parser
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Char (endOfLine)
+import Control.Applicative((*>),(<*),(<*>),(<$>))
 
 data AclEntry =
   AclEntry {aclFile :: FilePath

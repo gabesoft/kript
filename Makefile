@@ -40,6 +40,9 @@ sandbox:
 sandbox-delete:
 	$(CABAL) sandbox deleet
 
+configure:
+	$(CABAL) configure --enable-tests
+
 test: $(TEST_OUT)
 	@$(TEST_OUT)
 

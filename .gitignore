@@ -8,3 +8,4 @@ TAGS
 .hpc
 bin
 data/sample-gitowners*.txt
+data/sample.txt

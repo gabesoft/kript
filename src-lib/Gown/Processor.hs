@@ -5,7 +5,7 @@ module Gown.Processor
        where
 
 import Control.Monad
-import Data.List (sortBy, groupBy, minimumBy, tails)
+import Data.List (sortBy, groupBy, minimumBy, tails, transpose)
 import Data.Ord (comparing)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -20,8 +20,8 @@ sampleData = fmap extractSample parseAclsSample
 -- | each group collectively own all files in the input entries list
 findAclGroups :: [AclEntry] -> [[String]]
 findAclGroups entries =
-  findAllGroups allFiles
-                (Map.toList ownersMap)
+  findBestGroups allFiles
+                 (Map.toList ownersMap)
   where ownersMap = mkFilesByOwnerMap entries
         allFiles = map aclFile entries
 
@@ -67,21 +67,27 @@ addToOwnerMap item entry owner ownerMap =
                  (dedup $ item entry : items)
                  ownerMap
 
-findAllGroups
+-- | Find the best (smallest) groups such that the members of
+-- | each group collectively own all input files
+findBestGroups
   :: [String] -> [(String,[String])] -> [[String]]
-findAllGroups files owners = loop [] files owners
-  where loop groups remainingFiles remainingOwners =
-          case bestGroup remainingFiles remainingOwners of
+findBestGroups files owners = sortBy (comparing length) $ dedup $ take 200 (groups owners)
+  where groups [] = []
+        groups xs =
+          case bestGroup files xs of
+            [] -> []
+            gs -> gs : join rest
+                  where rest = map groups (map (remove xs) (sortBy (comparing id) gs))
+        remove [] _ = []
+        remove (x:xs) y
+          | fst x == y = xs
+          | otherwise = x : remove xs y
+        loop groups remaining =
+          case bestGroup files remaining of
             [] -> reverse groups
             gs ->
               loop (gs : groups)
-                   files
-                   (excludeAll gs remainingOwners)
-
--- | Exclude all entries in an association list whose keys are members of the given key list
-excludeAll :: (Eq a)
-           => [a] -> [(a,b)] -> [(a,b)]
-excludeAll keys = filter $ (not . flip elem keys) . fst
+                   (excludeAll gs remaining)
 
 -- | Given a list of files and an association list mapping owners to files
 -- | find the smallest group of owners that collectively own all specified files
@@ -129,6 +135,11 @@ pruneSimilar xset xmap =
   where alist = sortBy (comparing snd) $ Map.toList xmap
         groups = groupBy (\x y -> (snd x) == (snd y)) alist
         remove = join $ map (tail . map fst) groups
+
+-- | Exclude all entries in an association list whose keys are members of the given key list
+excludeAll :: (Eq a)
+           => [a] -> [(a,b)] -> [(a,b)]
+excludeAll keys = filter $ (not . flip elem keys) . fst
 
 mkMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)

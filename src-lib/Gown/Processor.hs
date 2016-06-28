@@ -6,8 +6,8 @@ module Gown.Processor
 
 import Control.Monad
 import Data.List (sortBy, groupBy, minimumBy, tails, transpose)
-import Data.Ord (comparing)
 import qualified Data.Map as Map
+import Data.Ord (comparing)
 import qualified Data.Set as Set
 import Gown.Parser
 
@@ -71,13 +71,15 @@ addToOwnerMap item entry owner ownerMap =
 -- | each group collectively own all input files
 findBestGroups
   :: [String] -> [(String,[String])] -> [[String]]
-findBestGroups files owners = sortBy (comparing length) $ dedup $ take 200 (groups owners)
+findBestGroups files owners =
+  sortBy (comparing length) $ dedup $ take 200 (groups owners)
   where groups [] = []
         groups xs =
           case bestGroup files xs of
             [] -> []
-            gs -> gs : join rest
-                  where rest = map groups (map (remove xs) (sortBy (comparing id) gs))
+            gs -> gs : interleave rest
+              where rest = map groups (map (remove xs) gs)
+        interleave = concat . transpose
         remove [] _ = []
         remove (x:xs) y
           | fst x == y = xs

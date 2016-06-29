@@ -5,6 +5,7 @@ module Gown.Processor
        where
 
 import Control.Monad
+import Control.Monad.State
 import Data.List (sortBy, groupBy, minimumBy, tails, transpose)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
@@ -20,7 +21,7 @@ sampleData = fmap extractSample parseAclsSample
 -- | each group collectively own all files in the input entries list
 findAclGroups :: [AclEntry] -> [[String]]
 findAclGroups entries =
-  findBestGroups allFiles
+  findBestStateful allFiles
                  (Map.toList ownersMap)
   where ownersMap = mkFilesByOwnerMap entries
         allFiles = map aclFile entries
@@ -84,12 +85,28 @@ findBestGroups files owners =
         remove (x:xs) y
           | fst x == y = xs
           | otherwise = x : remove xs y
-        loop groups remaining =
-          case bestGroup files remaining of
-            [] -> reverse groups
-            gs ->
-              loop (gs : groups)
-                   (excludeAll gs remaining)
+
+findBestStateful
+  :: [String] -> [(String,[String])] -> [[String]]
+findBestStateful files owners = sortBy (comparing length) $ take 100 $ filter (not . null) $ evalState (groups owners) Set.empty
+  where interleave = concat . transpose
+        remove [] _ = []
+        remove (x:xs) y
+          | fst x == y = xs
+          | otherwise = x : remove xs y
+        groups
+          :: [(String, [String])] -> State (Set.Set [String]) [[String]]
+        groups xs =
+          do seen <- get
+             let ys = map fst xs
+             case Set.member ys seen of
+               True -> return []
+               False -> do
+                 put (Set.insert ys seen)
+                 cont <- mapM groups rest
+                 return $ next : interleave cont
+                 where next = bestGroup files xs
+                       rest = map (remove xs) next
 
 -- | Given a list of files and an association list mapping owners to files
 -- | find the smallest group of owners that collectively own all specified files

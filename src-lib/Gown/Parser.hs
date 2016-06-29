@@ -22,7 +22,7 @@ data AclOwners =
 acls :: CharParser () [AclEntry]
 acls = header *> many fileOwners <* rest
   where header = string "OWNERS:" <* eol
-        rest = string "DESCRIPTIONS:" <* many anyChar
+        rest = (many upper) <* char ':' <* many anyChar
 
 -- | Parses one entry of the owners section from the output of a git owners command
 -- | It returns the file path and the associated acl owners

@@ -6,7 +6,7 @@ module Gown.Processor
 
 import Control.Monad
 import Control.Monad.State
-import Data.List (sortBy, groupBy, minimumBy, tails, transpose)
+import Data.List (sortBy, groupBy, minimumBy, transpose)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
 import qualified Data.Set as Set
@@ -19,94 +19,46 @@ sampleData = fmap extractSample parseAclsSample
 
 -- | Given a list of acl entries find all groups such that the members of
 -- | each group collectively own all files in the input entries list
-findAclGroups :: [AclEntry] -> [[String]]
-findAclGroups entries =
-  findBestStateful allFiles
-                 (Map.toList ownersMap)
-  where ownersMap = mkFilesByOwnerMap entries
-        allFiles = map aclFile entries
+findAclGroups :: Int -> [AclEntry] -> [[String]]
+findAclGroups maxResults entries =
+  findBestGroups maxResults
+                 (Map.toList $ mkFilesByOwnerMap entries)
 
--- | Returns an an association list matching owners with the comprehensive
+-- | Returns an an association list matching owners with a
 -- | list of acl types that they belong to
 aclTypesByOwner
   :: [AclEntry] -> [(String,[String])]
 aclTypesByOwner = aclsByOwner . mkAclsByOwnerMap
+  where aclsByOwner = sortBy (comparing fst) . Map.toList
 
-aclsByOwner
-  :: Map.Map String [String] -> [(String,[String])]
-aclsByOwner aclMap = sortBy ownerName owners
-  where owners = Map.toList aclMap
-        ownerName (n1,_) (n2,_) = compare n1 n2
+-- | Given an association list of keys to lists of values
+-- | find the smallest groups of keys such that the members of
+-- | each group collectively account for all values
+findBestGroups :: (Ord a,Ord b)
+               => Int -> [(a,[b])] -> [[a]]
+findBestGroups limit alist =
+  sortBy (comparing length) $ filter (not . null) groups
+  where values = dedup $ join $ map snd alist
+        groups =
+          evalState (findGroups alist)
+                    (Set.empty,values,limit)
 
-mkFilesByOwnerMap
-  :: [AclEntry] -> Map.Map String [String]
-mkFilesByOwnerMap = foldr addOwners Map.empty
-  where addOwners entry ownerMap =
-          let addToMap = addToOwnerMap aclFile entry
-              owners = join . map aclNames $ aclOwners entry
-          in foldr addToMap ownerMap owners
-
-mkAclsByOwnerMap
-  :: [AclEntry] -> Map.Map String [String]
-mkAclsByOwnerMap = foldr addOwners Map.empty
-  where addOwners entry ownerMap = foldr addAcls ownerMap (aclOwners entry)
-        addAcls owners nextMap =
-          let addToMap = addToOwnerMap aclType owners
-          in foldr addToMap nextMap (aclNames owners)
-
-addToOwnerMap
-  :: (Ord k,Ord a)
-  => (t -> a) -> t -> k -> Map.Map k [a] -> Map.Map k [a]
-addToOwnerMap item entry owner ownerMap =
-  case Map.lookup owner ownerMap of
-    Nothing ->
-      Map.insert owner
-                 [item entry]
-                 ownerMap
-    Just items ->
-      Map.insert owner
-                 (dedup $ item entry : items)
-                 ownerMap
-
--- | Find the best (smallest) groups such that the members of
--- | each group collectively own all input files
-findBestGroups
-  :: [String] -> [(String,[String])] -> [[String]]
-findBestGroups files owners =
-  sortBy (comparing length) $ dedup $ take 200 (groups owners)
-  where groups [] = []
-        groups xs =
-          case bestGroup files xs of
-            [] -> []
-            gs -> gs : interleave rest
-              where rest = map groups (map (remove xs) gs)
-        interleave = concat . transpose
-        remove [] _ = []
-        remove (x:xs) y
-          | fst x == y = xs
-          | otherwise = x : remove xs y
-
-findBestStateful
-  :: [String] -> [(String,[String])] -> [[String]]
-findBestStateful files owners = sortBy (comparing length) $ take 100 $ filter (not . null) $ evalState (groups owners) Set.empty
-  where interleave = concat . transpose
-        remove [] _ = []
-        remove (x:xs) y
-          | fst x == y = xs
-          | otherwise = x : remove xs y
-        groups
-          :: [(String, [String])] -> State (Set.Set [String]) [[String]]
-        groups xs =
-          do seen <- get
-             let ys = map fst xs
-             case Set.member ys seen of
-               True -> return []
-               False -> do
-                 put (Set.insert ys seen)
-                 cont <- mapM groups rest
-                 return $ next : interleave cont
-                 where next = bestGroup files xs
-                       rest = map (remove xs) next
+-- | Helper function for 'findBestGroups'
+findGroups
+  :: (Num t,Eq t,Ord a,Ord b)
+  => [(a,[b])] -> State (Set.Set [a],[b],t) [[a]]
+findGroups alist =
+  do (seen,vs,limit) <- get
+     let keys = map fst alist
+     case (Set.member keys seen,limit) of
+       (True,_) -> return []
+       (_,0) -> return []
+       (False,_) ->
+         do put (Set.insert keys seen,vs,limit - 1)
+            cont <- mapM findGroups rest
+            return $ next : interleave cont
+         where next = bestGroup vs alist
+               rest = map (removeByFst alist) next
 
 -- | Given a list of files and an association list mapping owners to files
 -- | find the smallest group of owners that collectively own all specified files
@@ -160,6 +112,36 @@ excludeAll :: (Eq a)
            => [a] -> [(a,b)] -> [(a,b)]
 excludeAll keys = filter $ (not . flip elem keys) . fst
 
+mkFilesByOwnerMap
+  :: [AclEntry] -> Map.Map String [String]
+mkFilesByOwnerMap = foldr addOwners Map.empty
+  where addOwners entry ownerMap =
+          let addToMap = addToOwnerMap aclFile entry
+              owners = join . map aclNames $ aclOwners entry
+          in foldr addToMap ownerMap owners
+
+mkAclsByOwnerMap
+  :: [AclEntry] -> Map.Map String [String]
+mkAclsByOwnerMap = foldr addOwners Map.empty
+  where addOwners entry ownerMap = foldr addAcls ownerMap (aclOwners entry)
+        addAcls owners nextMap =
+          let addToMap = addToOwnerMap aclType owners
+          in foldr addToMap nextMap (aclNames owners)
+
+addToOwnerMap
+  :: (Ord k,Ord a)
+  => (t -> a) -> t -> k -> Map.Map k [a] -> Map.Map k [a]
+addToOwnerMap item entry owner ownerMap =
+  case Map.lookup owner ownerMap of
+    Nothing ->
+      Map.insert owner
+                 [item entry]
+                 ownerMap
+    Just items ->
+      Map.insert owner
+                 (dedup $ item entry : items)
+                 ownerMap
+
 mkMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)
 mkMap alist = Map.fromList (map (sndMap Set.fromList) alist)
@@ -191,3 +173,13 @@ sortByLongestValues = sortBy (flip $ comparing $ length . snd)
 dedup :: (Ord a)
       => [a] -> [a]
 dedup = Set.toList . Set.fromList
+
+interleave :: [[a]] -> [a]
+interleave = concat . transpose
+
+removeByFst :: (Eq a)
+            => [(a,b)] -> a -> [(a,b)]
+removeByFst [] _ = []
+removeByFst (x:xs) y
+  | fst x == y = xs
+  | otherwise = x : removeByFst xs y

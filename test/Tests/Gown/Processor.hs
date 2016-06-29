@@ -4,6 +4,7 @@ module Tests.Gown.Processor where
 import Data.List
 import qualified Data.Set as Set
 import Gown.Processor
+import Gown.Parser (AclEntry(..), AclOwners(..))
 import Test.HUnit (Assertion, (@?=))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase)
@@ -33,7 +34,7 @@ pruneSimilarTest = (Set.toList actual) @?= expected
           ,("u7",["a","c"])
           ,("u8",["a","b"])
           ,("u9",["k","b"])]
-        expected = ["u1", "u2","u3","u5","u8","u9"]
+        expected = ["u1","u2","u3","u5","u8","u9"]
         actual =
           pruneSimilar (Set.fromList $ map fst alist)
                        (mkMap alist)
@@ -47,6 +48,29 @@ excludeAllTest = excludeAll keys alist @?= expected
         alist = [(x,y)|x <- "abf",y <- [1 .. 2]]
         expected = [('f',1),('f',2)]
 
+aclTypesByOwnerTest :: Assertion
+aclTypesByOwnerTest = actual @?= expected
+  where entries =
+          map (uncurry mkEntry)
+              [("f1",[("t1",["u1","u2","u3"]),("t2",["v1","v2"])])
+              ,("f2",[("t1",["u1","u2","u3"]),("t3",["k1"])])
+              ,("f3",[("t1",["u1","u2","u3"]),("t4",["y1","y2"])])]
+        actual = aclTypesByOwner entries
+        expected =
+          [("k1",["t3"])
+          ,("u1",["t1"])
+          ,("u2",["t1"])
+          ,("u3",["t1"])
+          ,("v1",["t2"])
+          ,("v2",["t2"])
+          ,("y1",["t4"])
+          ,("y2",["t4"])]
+
+mkEntry
+  :: FilePath -> [(String,[String])] -> AclEntry
+mkEntry file ownersByType =
+  AclEntry file (map (uncurry AclOwners) ownersByType)
+
 sortByLongestValuesProp :: [(Int,[Int])] -> Bool
 sortByLongestValuesProp alist =
   map (length . snd) sorted == (reverse . sort) (map (length . snd) alist)
@@ -59,6 +83,7 @@ unitTests =
             ,testCase "bestGroup - performance" bestGroupPerf
             ,testCase "bestGroup - not all files covered" bestGroupNotAllFilesCovered
             ,testCase "pruneSimilar" pruneSimilarTest
+            ,testCase "aclTypesByOwner" aclTypesByOwnerTest
             ,testCase "excludeAll" excludeAllTest]
 
 propTests :: TestTree
@@ -82,8 +107,6 @@ bestGroupPerf = sort (bestGroup files owners) @?= expected
           ,("u5",["a","b","c","d","e","y"])
           ,("u6",["a","b","c","d","e","f"])
           ,("u7",["a","b","c","d","e","f","g"])
-          ,("u8",["a","b","c","d","e","f","g","h"])
-          ,("u9",["a","b","c","d","e","f","g","h","i"])
           ,("u10",["a","b","c","d","e","f","g","h","i","j"])
           ,("u11",["a","b","c","d","e","f","g","h","i","j","k"])
           ,("u12",["a","b","c","d","e","f","g","h","i","j","k","l"])

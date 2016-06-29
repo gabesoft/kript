@@ -18,7 +18,7 @@ main =
   do args <- liftIO getArgs
      text <- liftIO getContents
      let ast = unpack $ parseAcls text
-     let groups = findAclGroups ast
+     let groups = findAclGroups 50 ast
      let aclsByOwner = aclTypesByOwner ast
      -- echo "Original AST:"
      -- echo $ T.pack $ (Pretty.ppShow ast)

@@ -1,7 +1,7 @@
 -- | Utilities for processing a list of acl entries
 module Gown.Processor
        (findAclGroups, aclTypesByOwner, excludeAll, bestGroup,
-        pruneSimilar, mkMap, mkReverseMap, toTuple, toAlist)
+        pruneSimilar, toMap, toReverseMap, toTuple, toAlist)
        where
 
 import Control.Monad
@@ -21,27 +21,25 @@ sampleData = fmap extractSample parseAclsSample
 -- | each group collectively own all files in the input entries list
 findAclGroups :: Int -> [AclEntry] -> [[String]]
 findAclGroups maxResults entries =
-  findBestGroups maxResults
-                 (toAlist $ mkReverseMap ownersByFile)
-  where ownersByFile = map (toTuple aclFile owners) entries
-        owners = join . map aclNames . aclOwners
+  findBestGroups maxResults $ (toAlist . toReverseMap) ownersByFile
+  where ownersByFile = map (toTuple aclFile toOwners) entries
+        toOwners = join . map aclNames . aclOwners
 
 -- | Returns an an association list matching owners with a
 -- | list of acl types that they belong to
 aclTypesByOwner
   :: [AclEntry] -> [(String,[String])]
-aclTypesByOwner entries = sortBy (comparing fst) owners
-  where ownersByType =
-          map (toTuple aclType aclNames) $ join $ map aclOwners entries
-        owners = toAlist $ mkReverseMap ownersByType
+aclTypesByOwner entries = sortBy (comparing fst) typesByOwner
+  where ownersByType = map (toTuple aclType aclNames) $ extractOwners entries
+        extractOwners = join . map aclOwners
+        typesByOwner = (toAlist . toReverseMap) ownersByType
 
 -- | Given an association list of keys to lists of values
 -- | find the smallest groups of keys such that the members of
 -- | each group collectively account for all values
 findBestGroups :: (Ord a,Ord b)
                => Int -> [(a,[b])] -> [[a]]
-findBestGroups limit alist =
-  map sort $ sortBy (comparing length) $ filter (not . null) groups
+findBestGroups limit alist = map sort $ sortBy (comparing length) groups
   where values = dedup $ join $ map snd alist
         groups =
           evalState (findGroups alist)
@@ -58,11 +56,15 @@ findGroups alist =
        (True,_) -> return []
        (_,0) -> return []
        (False,_) ->
-         do put (Set.insert keys seen,vs,updateLimit next)
-            cont <- mapM findGroups rest
-            return $ next : interleave cont
-         where next = bestGroup vs alist
-               rest = map (removeByFst alist) next
+         do put (Set.insert keys seen,vs,updateLimit group)
+            rest <- mapM findGroups nextAlist
+            let cont = interleave rest
+            return $
+              case group of
+                [] -> cont
+                _ -> group : cont
+         where group = bestGroup vs alist
+               nextAlist = map (removeByFst alist) group
                updateLimit [] = limit
                updateLimit xs = limit - 1
 
@@ -74,13 +76,13 @@ bestGroup :: (Ord a,Ord b)
 bestGroup files owners
   | filesSet == actualFiles = loop relevantFiles []
   | otherwise = []
-  where filesByOwner = mkMap owners
+  where filesByOwner = toMap owners
         filesSet = Set.fromList files
         relevantUsers =
           pruneSimilar (Set.fromList $ map fst owners)
                        filesByOwner
         ownersByFile =
-          Map.map (`Set.intersection` relevantUsers) (mkReverseMap owners)
+          Map.map (`Set.intersection` relevantUsers) (toReverseMap owners)
         actualFiles = Set.fromList (Map.keys ownersByFile)
         relevantFiles = pruneSimilar filesSet ownersByFile
         exclude owner remaining =
@@ -118,14 +120,14 @@ excludeAll :: (Eq a)
            => [a] -> [(a,b)] -> [(a,b)]
 excludeAll keys = filter $ (not . flip elem keys) . fst
 
-mkMap :: (Ord a,Ord b)
+toMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)
-mkMap alist = Map.fromList (map (sndMap Set.fromList) alist)
+toMap alist = Map.fromList (map (sndMap Set.fromList) alist)
 
-mkReverseMap
+toReverseMap
   :: (Ord a,Ord b)
   => [(a,[b])] -> Map.Map b (Set.Set a)
-mkReverseMap = foldr add Map.empty
+toReverseMap = foldr add Map.empty
   where add (a,bs) acc = foldr addNested acc bs
           where addNested b nestedAcc =
                   case Map.lookup b nestedAcc of

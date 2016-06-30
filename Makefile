@@ -50,4 +50,7 @@ configure-test:
 test: $(TEST_OUT)
 	@$(TEST_OUT)
 
+repl:
+	$(CABAL) repl --ghc-option="-package ghci-pretty"
+
 .PHONY: clean, all, build

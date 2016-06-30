@@ -65,7 +65,7 @@ bestGroupNotAllFilesCovered = sort (bestGroup files owners) @?= expected
         owners = filesByOwner aclEntriesLarge
         expected = []
 
-filesByOwner entries = toAlist $ mkReverseMap ownersByFile
+filesByOwner entries = toAlist $ toReverseMap ownersByFile
   where ownersByFile = map (toTuple aclFile owners) entries
         owners = join . map aclNames . aclOwners
 
@@ -84,7 +84,7 @@ pruneSimilarTest = (Set.toList actual) @?= expected
         expected = ["u1","u2","u3","u5","u8","u9"]
         actual =
           pruneSimilar (Set.fromList $ map fst alist)
-                       (mkMap alist)
+                       (toMap alist)
 
 excludeAllTest :: Assertion
 excludeAllTest = excludeAll keys alist @?= expected

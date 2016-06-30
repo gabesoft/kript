@@ -32,7 +32,6 @@ executable gown
                        shelly >= 1.6,
                        text >= 1.2,
                        pretty-show >= 1.6,
-                       ghci-pretty >= 0.0,
                        kript >= 0.1
   hs-source-dirs:      src-exe
   default-language:    Haskell2010

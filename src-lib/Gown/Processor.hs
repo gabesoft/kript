@@ -1,12 +1,12 @@
 -- | Utilities for processing a list of acl entries
 module Gown.Processor
-       (findAclGroups, aclTypesByOwner, excludeAll, sortByLongestValues,
-        bestGroup, pruneSimilar, mkMap, mkReverseMap)
+       (findAclGroups, aclTypesByOwner, excludeAll, bestGroup,
+        pruneSimilar, mkMap, mkReverseMap, toTuple, toAlist)
        where
 
 import Control.Monad
 import Control.Monad.State
-import Data.List (sortBy, groupBy, minimumBy, transpose)
+import Data.List (sort, sortBy, groupBy, minimumBy, transpose)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
 import qualified Data.Set as Set
@@ -22,14 +22,18 @@ sampleData = fmap extractSample parseAclsSample
 findAclGroups :: Int -> [AclEntry] -> [[String]]
 findAclGroups maxResults entries =
   findBestGroups maxResults
-                 (Map.toList $ mkFilesByOwnerMap entries)
+                 (toAlist $ mkReverseMap ownersByFile)
+  where ownersByFile = map (toTuple aclFile owners) entries
+        owners = join . map aclNames . aclOwners
 
 -- | Returns an an association list matching owners with a
 -- | list of acl types that they belong to
 aclTypesByOwner
   :: [AclEntry] -> [(String,[String])]
-aclTypesByOwner = aclsByOwner . mkAclsByOwnerMap
-  where aclsByOwner = sortBy (comparing fst) . Map.toList
+aclTypesByOwner entries = sortBy (comparing fst) owners
+  where ownersByType =
+          map (toTuple aclType aclNames) $ join $ map aclOwners entries
+        owners = toAlist $ mkReverseMap ownersByType
 
 -- | Given an association list of keys to lists of values
 -- | find the smallest groups of keys such that the members of
@@ -37,7 +41,7 @@ aclTypesByOwner = aclsByOwner . mkAclsByOwnerMap
 findBestGroups :: (Ord a,Ord b)
                => Int -> [(a,[b])] -> [[a]]
 findBestGroups limit alist =
-  sortBy (comparing length) $ filter (not . null) groups
+  map sort $ sortBy (comparing length) $ filter (not . null) groups
   where values = dedup $ join $ map snd alist
         groups =
           evalState (findGroups alist)
@@ -54,11 +58,13 @@ findGroups alist =
        (True,_) -> return []
        (_,0) -> return []
        (False,_) ->
-         do put (Set.insert keys seen,vs,limit - 1)
+         do put (Set.insert keys seen,vs,updateLimit next)
             cont <- mapM findGroups rest
             return $ next : interleave cont
          where next = bestGroup vs alist
                rest = map (removeByFst alist) next
+               updateLimit [] = limit
+               updateLimit xs = limit - 1
 
 -- | Given a list of files and an association list mapping owners to files
 -- | find the smallest group of owners that collectively own all specified files
@@ -112,36 +118,6 @@ excludeAll :: (Eq a)
            => [a] -> [(a,b)] -> [(a,b)]
 excludeAll keys = filter $ (not . flip elem keys) . fst
 
-mkFilesByOwnerMap
-  :: [AclEntry] -> Map.Map String [String]
-mkFilesByOwnerMap = foldr addOwners Map.empty
-  where addOwners entry ownerMap =
-          let addToMap = addToOwnerMap aclFile entry
-              owners = join . map aclNames $ aclOwners entry
-          in foldr addToMap ownerMap owners
-
-mkAclsByOwnerMap
-  :: [AclEntry] -> Map.Map String [String]
-mkAclsByOwnerMap = foldr addOwners Map.empty
-  where addOwners entry ownerMap = foldr addAcls ownerMap (aclOwners entry)
-        addAcls owners nextMap =
-          let addToMap = addToOwnerMap aclType owners
-          in foldr addToMap nextMap (aclNames owners)
-
-addToOwnerMap
-  :: (Ord k,Ord a)
-  => (t -> a) -> t -> k -> Map.Map k [a] -> Map.Map k [a]
-addToOwnerMap item entry owner ownerMap =
-  case Map.lookup owner ownerMap of
-    Nothing ->
-      Map.insert owner
-                 [item entry]
-                 ownerMap
-    Just items ->
-      Map.insert owner
-                 (dedup $ item entry : items)
-                 ownerMap
-
 mkMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)
 mkMap alist = Map.fromList (map (sndMap Set.fromList) alist)
@@ -166,9 +142,11 @@ mkReverseMap = foldr add Map.empty
 sndMap :: (a -> b) -> (c,a) -> (c,b)
 sndMap f (a,b) = (a,f b)
 
--- | Order an association list by the length of its values, longest first
-sortByLongestValues :: [(a,[b])] -> [(a,[b])]
-sortByLongestValues = sortBy (flip $ comparing $ length . snd)
+-- | Convert a hash map of sets to an association list
+toAlist :: Map.Map a (Set.Set b) -> [(a,[b])]
+toAlist = Map.toList . (Map.map Set.toList)
+
+toTuple a b x = (a x,b x)
 
 dedup :: (Ord a)
       => [a] -> [a]

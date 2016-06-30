@@ -1,15 +1,18 @@
 -- | Tests for Gown.Processor module
 module Tests.Gown.Processor where
 
+import Control.Monad (join)
 import Data.List
+import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Gown.Processor
 import Gown.Parser (AclEntry(..), AclOwners(..))
+import Gown.Processor
 import Test.HUnit (Assertion, (@?=))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase)
 import Test.Tasty.QuickCheck
        (testProperty, elements, listOf1, Arbitrary(..), Property, (==>))
+import Tests.Gown.TestData
 
 bestGroupTest :: Assertion
 bestGroupTest = sort (bestGroup files owners) @?= expected
@@ -21,6 +24,50 @@ bestGroupTest = sort (bestGroup files owners) @?= expected
           ,("u4",["b","c","d"])
           ,("u5",["b","d","e"])]
         expected = ["u1","u5"]
+
+findAclGroupsTest1 :: Assertion
+findAclGroupsTest1 = actual @?= expected
+  where actual = findAclGroups 5 aclEntriesTiny
+        expected = [["a","c"],["a","d"],["a","e"],["a","f"]]
+
+findAclGroupsTest2 :: Assertion
+findAclGroupsTest2 = actual @?= expected
+  where actual = findAclGroups 3 aclEntriesLarge
+        expected =
+          [["u1","u2","u20","u5"]
+          ,["u1","u10","u18","u20","u3","u5"]
+          ,["u1","u10","u18","u20","u4","u5"]]
+
+findAclGroupsTest3 :: Assertion
+findAclGroupsTest3 = actual @?= expected
+  where actual = findAclGroups 10 aclEntriesSmall
+        expected =
+          [["q1","u1"]
+          ,["q2","u1"]
+          ,["n1","u1","w1"]
+          ,["n2","u1","w1"]
+          ,["n3","u1","w1"]
+          ,["n3","u1","w2"]
+          ,["n3","u1","w3"]
+          ,["n3","u2","w3"]
+          ,["k1","n3","u3","w3"]
+          ,["n3","s1","u3","w3"]]
+
+bestGroupPerf :: Assertion
+bestGroupPerf = sort (bestGroup files owners) @?= expected
+  where files = map aclFile aclEntriesLarge
+        owners = filesByOwner aclEntriesLarge
+        expected = ["u1","u2","u20","u5"]
+
+bestGroupNotAllFilesCovered :: Assertion
+bestGroupNotAllFilesCovered = sort (bestGroup files owners) @?= expected
+  where files = group ('-' : ['a' .. 'z'])
+        owners = filesByOwner aclEntriesLarge
+        expected = []
+
+filesByOwner entries = toAlist $ mkReverseMap ownersByFile
+  where ownersByFile = map (toTuple aclFile owners) entries
+        owners = join . map aclNames . aclOwners
 
 pruneSimilarTest :: Assertion
 pruneSimilarTest = (Set.toList actual) @?= expected
@@ -39,9 +86,6 @@ pruneSimilarTest = (Set.toList actual) @?= expected
           pruneSimilar (Set.fromList $ map fst alist)
                        (mkMap alist)
 
-filesByOwnerTest :: Assertion
-filesByOwnerTest = undefined
-
 excludeAllTest :: Assertion
 excludeAllTest = excludeAll keys alist @?= expected
   where keys = "abcd"
@@ -50,31 +94,26 @@ excludeAllTest = excludeAll keys alist @?= expected
 
 aclTypesByOwnerTest :: Assertion
 aclTypesByOwnerTest = actual @?= expected
-  where entries =
-          map (uncurry mkEntry)
-              [("f1",[("t1",["u1","u2","u3"]),("t2",["v1","v2"])])
-              ,("f2",[("t1",["u1","u2","u3"]),("t3",["k1"])])
-              ,("f3",[("t1",["u1","u2","u3"]),("t4",["y1","y2"])])]
+  where entries = aclEntriesSmall
         actual = aclTypesByOwner entries
         expected =
           [("k1",["t3"])
+          ,("n1",["t6"])
+          ,("n2",["t6"])
+          ,("n3",["t6"])
+          ,("q1",["t7","t8"])
+          ,("q2",["t7","t8"])
+          ,("s1",["t9"])
           ,("u1",["t1"])
-          ,("u2",["t1"])
+          ,("u2",["t1","t9"])
           ,("u3",["t1"])
           ,("v1",["t2"])
           ,("v2",["t2"])
+          ,("w1",["t5"])
+          ,("w2",["t5"])
+          ,("w3",["t5"])
           ,("y1",["t4"])
           ,("y2",["t4"])]
-
-mkEntry
-  :: FilePath -> [(String,[String])] -> AclEntry
-mkEntry file ownersByType =
-  AclEntry file (map (uncurry AclOwners) ownersByType)
-
-sortByLongestValuesProp :: [(Int,[Int])] -> Bool
-sortByLongestValuesProp alist =
-  map (length . snd) sorted == (reverse . sort) (map (length . snd) alist)
-  where sorted = sortByLongestValues alist
 
 unitTests :: TestTree
 unitTests =
@@ -84,69 +123,13 @@ unitTests =
             ,testCase "bestGroup - not all files covered" bestGroupNotAllFilesCovered
             ,testCase "pruneSimilar" pruneSimilarTest
             ,testCase "aclTypesByOwner" aclTypesByOwnerTest
+            ,testCase "findAclGroups - 1" findAclGroupsTest1
+            ,testCase "findAclGroups - 2" findAclGroupsTest2
+            ,testCase "findAclGroups - 3" findAclGroupsTest3
             ,testCase "excludeAll" excludeAllTest]
 
 propTests :: TestTree
-propTests =
-  testGroup "Property Tests" [testProperty "sortByLongestValues" sortByLongestValuesProp]
+propTests = testGroup "Property Tests" []
 
 tests :: TestTree
 tests = testGroup "Gown.Processor" [unitTests,propTests]
-
-bestGroupPerf :: Assertion
-bestGroupPerf = sort (bestGroup files owners) @?= expected
-  where files = group ['a' .. 'z']
-        owners =
-          [("u1",["a","b","x","w","z"])
-          ,("u2",["a","b","u","v","w"])
-          ,("u3",["a","b","c"])
-          ,("u4",["a","b","c","d"])
-          ,("u3a",["a","b"])
-          ,("u3b",["a","b"])
-          ,("u3c",["a","b"])
-          ,("u5",["a","b","c","d","e","y"])
-          ,("u6",["a","b","c","d","e","f"])
-          ,("u7",["a","b","c","d","e","f","g"])
-          ,("u10",["a","b","c","d","e","f","g","h","i","j"])
-          ,("u11",["a","b","c","d","e","f","g","h","i","j","k"])
-          ,("u12",["a","b","c","d","e","f","g","h","i","j","k","l"])
-          ,("u13",["a","b","c","d","e","f","g","h","i","j","k","l","m"])
-          ,("u14",["a","b","c","d","e","f","g","h","i","j","k","l","m","n"])
-          ,("u15",["a","b","c","d","e","f","g","h","l","m","n","o"])
-          ,("u16"
-           ,["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"])
-          ,("u17",["a","b","h","i","j","k","l","m","n","o","p","q"])
-          ,("u18",["a","b","g","h","i","j","k","l","m","n","o","p","q","r"])
-          ,("u19",["a","b","h","i","j","k","l","m","n","o","p","q","r","s"])
-          ,("u20",["a","b","c","d","h","i","j","k","l","m","n","o","s","t"])]
-        expected = ["u1","u10","u18","u2","u20","u5"]
-
-bestGroupNotAllFilesCovered :: Assertion
-bestGroupNotAllFilesCovered = sort (bestGroup files owners) @?= expected
-  where files = group ['a' .. 'z']
-        owners =
-          [("u1",["a","x","w","z"])
-          ,("u2",["a","b","u"])
-          ,("u3",["a","b","c"])
-          ,("u3a",["a","b","c"])
-          ,("u3b",["a","b","c"])
-          ,("u3c",["a","b","c"])
-          ,("u4",["a","b","c","d"])
-          ,("u5",["a","b","c","d","e","y"])
-          ,("u6",["a","b","c","d","e","f"])
-          ,("u7",["a","b","c","d","e","f","g"])
-          ,("u8",["a","b","c","d","e","f","g","h"])
-          ,("u9",["a","b","c","d","e","f","g","h","i"])
-          ,("u10",["a","b","c","d","e","f","g","h","i","j"])
-          ,("u11",["a","b","c","d","e","f","g","h","i","j","k"])
-          ,("u12",["a","b","c","d","e","f","g","h","i","j","k","l"])
-          ,("u13",["a","b","c","d","e","f","g","h","i","j","k","l","m"])
-          ,("u14",["a","b","c","d","e","f","g","h","i","j","k","l","m","n"])
-          ,("u15",["a","b","c","d","e","f","g","h","l","m","n","o"])
-          ,("u16"
-           ,["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p"])
-          ,("u17",["h","i","j","k","l","m","n","o","p","q"])
-          ,("u18",["a","b","g","h","i","j","k","l","m","n","o","p","q","r"])
-          ,("u19",["a","b","h","i","j","k","l","m","n","o","p","q","r","s"])
-          ,("u20",["a","b","c","d","h","i","j","k","l","m","n","o","s","t"])]
-        expected = []

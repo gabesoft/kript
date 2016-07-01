@@ -1,12 +1,12 @@
 -- | Utilities for processing a list of acl entries
 module Gown.Processor
-       (findAclGroups, aclTypesByOwner, excludeAll, bestGroup,
+       (findAclGroups, aclTypesByOwner, bestGroup,
         pruneSimilar, toMap, toReverseMap, toTuple, toAlist)
        where
 
 import Control.Monad
 import Control.Monad.State
-import Data.List (sort, sortBy, groupBy, minimumBy, transpose)
+import Data.List (sort, sortBy, minimumBy, transpose)
 import qualified Data.Map as Map
 import Data.Ord (comparing)
 import qualified Data.Set as Set
@@ -21,7 +21,7 @@ sampleData = fmap extractSample parseAclsSample
 -- | each group collectively own all files in the input entries list
 findAclGroups :: Int -> [AclEntry] -> [[String]]
 findAclGroups maxResults entries =
-  findBestGroups maxResults $ (toAlist . toReverseMap) ownersByFile
+  ownersByFile & toReverseMap & toAlist & findBestGroups maxResults
   where ownersByFile = map (toTuple aclFile toOwners) entries
         toOwners = join . map aclNames . aclOwners
 
@@ -30,100 +30,99 @@ findAclGroups maxResults entries =
 aclTypesByOwner
   :: [AclEntry] -> [(String,[String])]
 aclTypesByOwner entries = sortBy (comparing fst) typesByOwner
-  where ownersByType = map (toTuple aclType aclNames) $ extractOwners entries
-        extractOwners = join . map aclOwners
-        typesByOwner = (toAlist . toReverseMap) ownersByType
+  where typesByOwner = ownersByType & toReverseMap & toAlist
+        ownersByType = entries & map aclOwners & join & mapByType
+        mapByType = map (toTuple aclType aclNames)
 
 -- | Given an association list of keys to lists of values
 -- | find the smallest groups of keys such that the members of
 -- | each group collectively account for all values
 findBestGroups :: (Ord a,Ord b)
                => Int -> [(a,[b])] -> [[a]]
-findBestGroups limit alist = map sort $ sortBy (comparing length) groups
-  where values = dedup $ join $ map snd alist
-        groups =
+findBestGroups limit alist = groups & sortBy (comparing length) & map sort
+  where groups =
           evalState (findGroups alist)
-                    (Set.empty,values,limit)
+                    (Set.empty,valuesToSet alist,limit)
 
 -- | Helper function for 'findBestGroups'
 findGroups
   :: (Num t,Eq t,Ord a,Ord b)
-  => [(a,[b])] -> State (Set.Set [a],[b],t) [[a]]
+  => [(a,[b])] -> State (Set.Set [a],Set.Set b,t) [[a]]
 findGroups alist =
-  do (seen,vs,limit) <- get
+  do (seen,vals,limit) <- get
      let keys = map fst alist
      case (Set.member keys seen,limit) of
        (True,_) -> return []
        (_,0) -> return []
        (False,_) ->
-         do put (Set.insert keys seen,vs,updateLimit group)
+         do put (Set.insert keys seen,vals,nextLimit group)
             rest <- mapM findGroups nextAlist
             let cont = interleave rest
             return $
               case group of
                 [] -> cont
                 _ -> group : cont
-         where group = bestGroup vs alist
+         where group =
+                 case vals == valuesToSet alist of
+                   True -> bestGroup alist
+                   False -> []
                nextAlist = map (removeByFst alist) group
-               updateLimit [] = limit
-               updateLimit xs = limit - 1
+               nextLimit xs
+                 | null xs = limit
+                 | otherwise = limit - 1
 
--- | Given a list of files and an association list mapping owners to files
--- | find the smallest group of owners that collectively own all specified files
+-- | Given an association list of keys to lists of values
+-- | find the smallest group of keys such that the members of
+-- | each group collectively account for all values
 -- | This is in essence a brute force implementation of the set cover problem
 bestGroup :: (Ord a,Ord b)
-          => [b] -> [(a,[b])] -> [a]
-bestGroup files owners
-  | filesSet == actualFiles = loop relevantFiles []
-  | otherwise = []
-  where filesByOwner = toMap owners
-        filesSet = Set.fromList files
-        relevantUsers =
-          pruneSimilar (Set.fromList $ map fst owners)
-                       filesByOwner
-        ownersByFile =
-          Map.map (`Set.intersection` relevantUsers) (toReverseMap owners)
-        actualFiles = Set.fromList (Map.keys ownersByFile)
-        relevantFiles = pruneSimilar filesSet ownersByFile
-        exclude owner remaining =
-          case Map.lookup owner filesByOwner of
+          => [(a,[b])] -> [a]
+bestGroup alist = loop initialValues []
+  where valuesByKey = toMap alist
+        keysByValue =
+          Map.map (`Set.intersection` initialKeys) (toReverseMap alist)
+        initialKeys = pruneSimilar valuesByKey
+        initialValues = pruneSimilar keysByValue
+        excludeValues key inputValues =
+          case Map.lookup key valuesByKey of
             Nothing -> Set.empty
-            Just fs -> Set.difference remaining fs
-        loop remaining best
-          | Set.null remaining = best
+            Just keyValues -> Set.difference inputValues keyValues
+        loop valuesLeft best
+          | Set.null valuesLeft = best
           | otherwise =
-            let file = Set.elemAt 0 remaining
-            in case Map.lookup file ownersByFile of
-                 Nothing -> []
-                 Just os ->
-                   minimumBy (comparing length) $
-                   map (\o ->
-                          loop (exclude o remaining)
-                               (o : best))
-                       (Set.toList os)
+            case Map.lookup (Set.elemAt 0 valuesLeft)
+                            keysByValue of
+              Nothing -> []
+              Just matchingKeys ->
+                minimumBy (comparing length) $
+                map (\key ->
+                       loop (excludeValues key valuesLeft)
+                            (key : best))
+                    (Set.toList matchingKeys)
 
--- | Given a set of keys and a map containing the same keys
--- | keep only items in the keys set that have different values
--- | in the map
+-- | Given a hash map of keys and values where some keys could
+-- | map to identical values, return a set of keys that map to
+-- | distinct values
 pruneSimilar
   :: (Eq a,Ord a,Ord b)
-  => Set.Set b -> Map.Map b (Set.Set a) -> Set.Set b
-pruneSimilar xset xmap =
-  Set.difference xset
-                 (Set.fromList remove)
-  where alist = sortBy (comparing snd) $ Map.toList xmap
-        groups = groupBy (\x y -> (snd x) == (snd y)) alist
-        remove = join $ map (tail . map fst) groups
+  => Map.Map b (Set.Set a) -> Set.Set b
+pruneSimilar inputMap =
+  fst $
+  Map.foldlWithKey addKeys
+                   (Set.empty,inputMap & Map.elems & Set.fromList)
+                   inputMap
+  where addKeys (kacc,vset) key value
+          | Set.member value vset = (Set.insert key kacc,Set.delete value vset)
+          | otherwise = (kacc,vset)
 
--- | Exclude all entries in an association list whose keys are members of the given key list
-excludeAll :: (Eq a)
-           => [a] -> [(a,b)] -> [(a,b)]
-excludeAll keys = filter $ (not . flip elem keys) . fst
-
+-- | Convert an association list of keys mapping to lists of values into a hash map
+-- | where the keys map to sets of values
 toMap :: (Ord a,Ord b)
       => [(a,[b])] -> Map.Map a (Set.Set b)
 toMap alist = Map.fromList (map (sndMap Set.fromList) alist)
 
+-- | Convert an association list of keys mapping to lists of values into a hash map
+-- | where the values map to sets of keys
 toReverseMap
   :: (Ord a,Ord b)
   => [(a,[b])] -> Map.Map b (Set.Set a)
@@ -148,11 +147,15 @@ sndMap f (a,b) = (a,f b)
 toAlist :: Map.Map a (Set.Set b) -> [(a,[b])]
 toAlist = Map.toList . (Map.map Set.toList)
 
+toTuple :: (a -> b) -> (a -> c) -> a -> (b,c)
 toTuple a b x = (a x,b x)
 
-dedup :: (Ord a)
-      => [a] -> [a]
-dedup = Set.toList . Set.fromList
+valuesToSet :: (Ord b)
+            => [(a,[b])] -> Set.Set b
+valuesToSet = Set.fromList . join . map snd
+
+(&) :: a -> (a -> c) -> c
+(&) = flip ($)
 
 interleave :: [[a]] -> [a]
 interleave = concat . transpose

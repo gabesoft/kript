@@ -15,9 +15,8 @@ import Test.Tasty.QuickCheck
 import Tests.Gown.TestData
 
 bestGroupTest :: Assertion
-bestGroupTest = sort (bestGroup files owners) @?= expected
-  where files = group ['a' .. 'e']
-        owners =
+bestGroupTest = sort (bestGroup owners) @?= expected
+  where owners =
           [("u1",["a","c"])
           ,("u2",["a"])
           ,("u3",["b","d"])
@@ -54,16 +53,9 @@ findAclGroupsTest3 = actual @?= expected
           ,["n3","s1","u3","w3"]]
 
 bestGroupPerf :: Assertion
-bestGroupPerf = sort (bestGroup files owners) @?= expected
-  where files = map aclFile aclEntriesLarge
-        owners = filesByOwner aclEntriesLarge
+bestGroupPerf = sort (bestGroup owners) @?= expected
+  where owners = filesByOwner aclEntriesLarge
         expected = ["u1","u2","u20","u5"]
-
-bestGroupNotAllFilesCovered :: Assertion
-bestGroupNotAllFilesCovered = sort (bestGroup files owners) @?= expected
-  where files = group ('-' : ['a' .. 'z'])
-        owners = filesByOwner aclEntriesLarge
-        expected = []
 
 filesByOwner entries = toAlist $ toReverseMap ownersByFile
   where ownersByFile = map (toTuple aclFile owners) entries
@@ -82,15 +74,7 @@ pruneSimilarTest = (Set.toList actual) @?= expected
           ,("u8",["a","b"])
           ,("u9",["k","b"])]
         expected = ["u1","u2","u3","u5","u8","u9"]
-        actual =
-          pruneSimilar (Set.fromList $ map fst alist)
-                       (toMap alist)
-
-excludeAllTest :: Assertion
-excludeAllTest = excludeAll keys alist @?= expected
-  where keys = "abcd"
-        alist = [(x,y)|x <- "abf",y <- [1 .. 2]]
-        expected = [('f',1),('f',2)]
+        actual = pruneSimilar (toMap alist)
 
 aclTypesByOwnerTest :: Assertion
 aclTypesByOwnerTest = actual @?= expected
@@ -120,13 +104,11 @@ unitTests =
   testGroup "Unit Tests"
             [testCase "bestGroup" bestGroupTest
             ,testCase "bestGroup - performance" bestGroupPerf
-            ,testCase "bestGroup - not all files covered" bestGroupNotAllFilesCovered
             ,testCase "pruneSimilar" pruneSimilarTest
             ,testCase "aclTypesByOwner" aclTypesByOwnerTest
             ,testCase "findAclGroups - 1" findAclGroupsTest1
             ,testCase "findAclGroups - 2" findAclGroupsTest2
-            ,testCase "findAclGroups - 3" findAclGroupsTest3
-            ,testCase "excludeAll" excludeAllTest]
+            ,testCase "findAclGroups - 3" findAclGroupsTest3]
 
 propTests :: TestTree
 propTests = testGroup "Property Tests" []

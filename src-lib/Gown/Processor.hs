@@ -1,7 +1,7 @@
 -- | Utilities for processing a list of acl entries
 module Gown.Processor
-       (findAclGroups, aclTypesByOwner, bestGroup,
-        pruneSimilar, toMap, toReverseMap, toTuple, toAlist)
+       (findAclGroups, aclTypesByOwner, bestGroup, pruneSimilar, toMap,
+        toReverseMap, toTuple, toAlist)
        where
 
 import Control.Monad
@@ -56,17 +56,16 @@ findGroups alist =
        (_,0) -> return []
        (False,_) ->
          do put (Set.insert keys seen,vals,nextLimit group)
-            rest <- mapM findGroups nextAlist
+            rest <- mapM findGroups (nextAlist group)
             let cont = interleave rest
             return $
               case group of
                 [] -> cont
                 _ -> group : cont
-         where group =
-                 case vals == valuesToSet alist of
-                   True -> bestGroup alist
-                   False -> []
-               nextAlist = map (removeByFst alist) group
+         where group
+                 | valuesToSet alist == vals = bestGroup alist
+                 | otherwise = []
+               nextAlist = map (removeByFst alist)
                nextLimit xs
                  | null xs = limit
                  | otherwise = limit - 1
@@ -84,9 +83,9 @@ bestGroup alist = loop initialValues []
         initialKeys = pruneSimilar valuesByKey
         initialValues = pruneSimilar keysByValue
         excludeValues key inputValues =
-          case Map.lookup key valuesByKey of
-            Nothing -> Set.empty
-            Just keyValues -> Set.difference inputValues keyValues
+          maybe Set.empty
+                (Set.difference inputValues)
+                (Map.lookup key valuesByKey)
         loop valuesLeft best
           | Set.null valuesLeft = best
           | otherwise =
@@ -109,11 +108,11 @@ pruneSimilar
 pruneSimilar inputMap =
   fst $
   Map.foldlWithKey addKeys
-                   (Set.empty,inputMap & Map.elems & Set.fromList)
+                   (Set.empty,Set.empty)
                    inputMap
-  where addKeys (kacc,vset) key value
-          | Set.member value vset = (Set.insert key kacc,Set.delete value vset)
-          | otherwise = (kacc,vset)
+  where addKeys (kacc,vacc) key value
+          | Set.member value vacc = (kacc,vacc)
+          | otherwise = (Set.insert key kacc,Set.insert value vacc)
 
 -- | Convert an association list of keys mapping to lists of values into a hash map
 -- | where the keys map to sets of values

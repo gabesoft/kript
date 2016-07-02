@@ -28,5 +28,4 @@ main =
      echo $ T.pack $ (Pretty.ppShow groups)
 
 unpack :: Either a [b] -> [b]
-unpack (Left _) = []
-unpack (Right xs) = xs
+unpack = either (const []) id

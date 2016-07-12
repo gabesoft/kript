@@ -29,7 +29,7 @@ library
 executable gown
   main-is:             gown.hs
   build-depends:       base >=4.5 && < 5,
-                       shelly >= 1.6,
+                       process >= 1.4,
                        text >= 1.2,
                        pretty-show >= 1.6,
                        kript >= 0.1

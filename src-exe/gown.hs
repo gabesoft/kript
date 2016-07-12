@@ -18,55 +18,25 @@ main =
      let ast = unpack $ parseAcls text
      let groups = findAclGroups 20 ast -- TODO make this an argument
      let aclsByOwner = aclTypesByOwner ast
-     putStrLn $ heading1 "Acl types by owner:"
+     putStrLn $ heading "Acl types by owner:"
      mapM_ printOwnerAcl aclsByOwner
-     putStrLn ""
-     putStrLn $ heading1 "Best groups:"
+     putStrLn $ heading "Best groups:"
      mapM_ printGroup groups
 
 printOwnerAcl :: (String,[String]) -> IO ()
 printOwnerAcl (owner,acls') =
-  do putStrLn owner
+  do putStrLn $ owner ++ ":"
      mapM_ putAcl acls'
-  where putAcl acl' = putStrLn $ black "  - " ++ acl'
+  where putAcl acl' = putStrLn $ "  - " ++ acl'
 
 printGroup :: [String] -> IO ()
 printGroup group' = do putStrLn str
   where str = join $ intersperse "," group'
 
-heading1 = yellow
-
-heading2 = blue
+heading str = chalk "yellow" $ "\n\n" ++ str ++ "\n"
 
 unpack :: Either a [b] -> [b]
 unpack = either (const []) id
-
-black :: String -> String
-black = chalk "black"
-
-red :: String -> String
-red = chalk "red"
-
-green :: String -> String
-green = chalk "green"
-
-yellow :: String -> String
-yellow = chalk "yellow"
-
-blue :: String -> String
-blue = chalk "blue"
-
-magenta :: String -> String
-magenta = chalk "magenta"
-
-cyan :: String -> String
-cyan = chalk "cyan"
-
-white :: String -> String
-white = chalk "white"
-
-gray :: String -> String
-gray = chalk "gray"
 
 mkEsc :: Int -> String
 mkEsc value = "\x1b[" ++ show value ++ "m"

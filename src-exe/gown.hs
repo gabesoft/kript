@@ -38,15 +38,13 @@ heading str = chalk "yellow" $ "\n\n" ++ str ++ "\n"
 unpack :: Either a [b] -> [b]
 unpack = either (const []) id
 
-mkEsc :: Int -> String
-mkEsc value = "\x1b[" ++ show value ++ "m"
-
 chalk :: String -> String -> String
-chalk color str = (mkEsc start) ++ str ++ (mkEsc end)
+chalk color str = (colorEsc start) ++ str ++ (colorEsc end)
   where (start,end) =
           maybe (39,39)
                 id
                 (lookup color colors)
+        colorEsc value = "\x1b[" ++ show value ++ "m"
 
 colors :: [(String,(Int,Int))]
 colors =

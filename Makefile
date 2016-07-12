@@ -36,10 +36,10 @@ install:
 	$(CABAL) install --enable-tests
 
 sandbox:
-	$(CABAL) init sandbox
+	$(CABAL) sandbox init
 
 sandbox-delete:
-	$(CABAL) sandbox deleet
+	$(CABAL) sandbox delete
 
 configure:
 	$(CABAL) configure

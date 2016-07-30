@@ -144,10 +144,10 @@ sndMap f (a,b) = (a,f b)
 
 -- | Convert a hash map of sets to an association list
 toAlist :: Map.Map a (Set.Set b) -> [(a,[b])]
-toAlist = Map.toList . (Map.map Set.toList)
+toAlist = Map.toList . Map.map Set.toList
 
 toTuple :: (a -> b) -> (a -> c) -> a -> (b,c)
-toTuple a b x = (a x,b x)
+toTuple a b = (,) <$> a <*> b
 
 valuesToSet :: (Ord b)
             => [(a,[b])] -> Set.Set b

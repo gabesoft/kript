@@ -5,6 +5,7 @@
 dist
 TAGS
 .cabal-sandbox
+.stack-work
 .hpc
 bin
 data/sample-gitowners*.txt
